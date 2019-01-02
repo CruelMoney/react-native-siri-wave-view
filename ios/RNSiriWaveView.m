@@ -1,9 +1,13 @@
 
 #import "RNSiriWaveView.h"
+#import <AVFoundation/AVFoundation.h>
+
 
 @implementation RNSiriWaveView
 
-NSTimer *waveTimer;
+AVAudioRecorder *recorder;
+CADisplayLink *waveTimer;
+SCSiriWaveformView *siriWave;
 
 - (dispatch_queue_t)methodQueue
 {
@@ -13,9 +17,25 @@ NSTimer *waveTimer;
 RCT_EXPORT_MODULE()
 
 - (UIView *)view {
-    SCSiriWaveformView *siriWave = [[SCSiriWaveformView alloc] init];
-    waveTimer = NULL;
+    siriWave = [[SCSiriWaveformView alloc] init];
+    NSDictionary *settings = @{AVSampleRateKey:          [NSNumber numberWithFloat: 2000.0],
+                               AVFormatIDKey:            [NSNumber numberWithInt: kAudioFormatAppleLossless],
+                               AVNumberOfChannelsKey:    [NSNumber numberWithInt: 2],
+                               AVEncoderAudioQualityKey: [NSNumber numberWithInt: AVAudioQualityMax]};
+    
+    NSError *error;
+    NSURL *url = [NSURL fileURLWithPath:@"/dev/null"];
+    
+    if(recorder == NULL){
+        recorder = [[AVAudioRecorder alloc] initWithURL:url settings:settings error:&error];
+    }
+    
+    if(waveTimer == NULL){
+        waveTimer = [CADisplayLink displayLinkWithTarget:self selector:@selector(updateMeters)];
+        [waveTimer addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
+    }
 
+    
     return siriWave;
 }
 
@@ -66,39 +86,32 @@ RCT_CUSTOM_VIEW_PROPERTY(phaseShift, NSNumber *, SCSiriWaveformView) {
 
 
 RCT_CUSTOM_VIEW_PROPERTY(startAnimation, bool, SCSiriWaveformView) {
-    if ([json integerValue] == 1 && waveTimer == NULL) {
-        SCSiriWaveformView *siriWave = view;
-        
-        if (siriWave != nil) {
-            // Timer
-            waveTimer = [NSTimer scheduledTimerWithTimeInterval: 0.02
-               target:self
-               selector: @selector(targetMethod:)
-               userInfo: siriWave
-               repeats:YES];
-        }
+    if ([json integerValue] == 1 && !recorder.isRecording) {
+        [recorder prepareToRecord];
+        [recorder setMeteringEnabled:YES];
+        [recorder record];
+    }else{
+        [recorder stop];
     }
 }
 
-RCT_CUSTOM_VIEW_PROPERTY(stopAnimation, bool, SCSiriWaveformView) {
-    if ([json integerValue] == 1 && waveTimer != NULL) {
-        [waveTimer invalidate];
-        waveTimer = NULL;
-    }
+
+- (void)updateMeters
+{
+    CGFloat normalizedValue;
+    [recorder updateMeters];
+    normalizedValue = [self _normalizedPowerLevelFromDecibels:[recorder peakPowerForChannel:0]];
+    
+    [siriWave updateWithLevel:normalizedValue];
 }
 
--(void)targetMethod:(NSTimer *)timer  {
-    SCSiriWaveformView *siriWave = [timer userInfo];
-
-    [siriWave updateWithLevel: [self _normalizedPowerLevelFromDecibels: .1]];
-}
 
 - (CGFloat)_normalizedPowerLevelFromDecibels:(CGFloat)decibels {
-    if (decibels < -60.0f || decibels == 0.0f) {
+    if (decibels < -150.0f || decibels == 0.0f) {
         return 0.0f;
     }
     
-    return powf((powf(10.0f, 0.05f * decibels) - powf(10.0f, 0.05f * -60.0f)) * (1.0f / (1.0f - powf(10.0f, 0.05f * -60.0f))), 1.0f / 2.0f);
+    return powf((powf(10.0f, 0.05f * decibels) - powf(10.0f, 0.05f * -150.0f)) * (1.0f / (1.0f - powf(10.0f, 0.05f * -150.0f))), 1.0f / 2.0f);
 }
 
 
