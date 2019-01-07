@@ -100,14 +100,14 @@ RCT_CUSTOM_VIEW_PROPERTY(startAnimation, bool, SCSiriWaveformView) {
 {
     CGFloat normalizedValue;
     [recorder updateMeters];
-    normalizedValue = [self _normalizedPowerLevelFromDecibels:[recorder peakPowerForChannel:0]];
+    normalizedValue = [self _normalizedPowerLevelFromDecibels:[recorder averagePowerForChannel:0]];
     
     [siriWave updateWithLevel:normalizedValue];
 }
 
 
 - (CGFloat)_normalizedPowerLevelFromDecibels:(CGFloat)decibels {
-    if (decibels < -150.0f || decibels == 0.0f) {
+    if (decibels < -150.0f || decibels > 0.0f) {
         return 0.0f;
     }
     
